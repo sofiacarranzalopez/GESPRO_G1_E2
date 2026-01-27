@@ -1,46 +1,52 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Cliente Flask</title>
-    <link rel="stylesheet" href="styles.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Gestor de tareas</title>
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+  <header class="topbar">
+    <div>
+      <h1>Gestor de tareas</h1>
+      <p class="sub">Tareas guardadas en CSV · Kanban</p>
+    </div>
+    <div class="status-pill" id="apiStatus">API: —</div>
+  </header>
 
-    <h1>Consumir API Flask</h1>
+  <section class="card">
+    <h2>Nueva tarea</h2>
+    <form id="taskForm" class="form">
+      <input id="title" type="text" placeholder="Título de la tarea" required />
+      <select id="points">
+        <option value="1">1 pt</option>
+        <option value="2" selected>2 pts</option>
+        <option value="3">3 pts</option>
+        <option value="5">5 pts</option>
+        <option value="8">8 pts</option>
+      </select>
+      <input id="assignee" type="text" placeholder="Asignado a (opcional)" />
+      <button type="submit" class="btn primary">Crear</button>
+    </form>
+  </section>
 
-    <button onclick="getInfo()">Obtener información</button>
-    <button onclick="getDetalles()">Obtener detalles</button>
+  <section class="board">
+    <div class="column">
+      <div class="col-head"><h3>TODO</h3><span class="badge" id="countTODO">0</span></div>
+      <div class="dropzone" id="todoList"></div>
+    </div>
 
-    <pre id="result">Aquí aparecerá la respuesta…</pre>
+    <div class="column">
+      <div class="col-head"><h3>IN_PROGRESS</h3><span class="badge" id="countIN_PROGRESS">0</span></div>
+      <div class="dropzone" id="progressList"></div>
+    </div>
 
-    <script>
-        async function getInfo() {
-            try {
-                const response = await fetch("http://127.0.0.1:5000/api/info");
-                const data = await response.json();
-                document.getElementById("result").textContent =
-                    JSON.stringify(data, null, 2);
-            } catch (error) {
-                document.getElementById("result").textContent =
-                    "Error al conectar con el servidor";
-                console.error(error);
-            }
-        }
-
-        async function getDetalles() {
-            try {
-                const response = await fetch("http://127.0.0.1:5000/api/detalles");
-                const data = await response.json();
-                document.getElementById("result").textContent =
-                    JSON.stringify(data, null, 2);
-            } catch (error) {
-                document.getElementById("result").textContent =
-                    "Error al conectar con el endpoint de detalles";
-                console.error(error);
-            }
-        }
-    </script>
+    <div class="column">
+      <div class="col-head"><h3>DONE</h3><span class="badge" id="countDONE">0</span></div>
+      <div class="dropzone" id="doneList"></div>
+    </div>
+  </section>
 
 </body>
 </html>
