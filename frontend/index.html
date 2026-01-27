@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Cliente Flask</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <h1>Consumir API Flask</h1>
+
+    <button onclick="getInfo()">Obtener información</button>
+    <button onclick="getDetalles()">Obtener detalles</button>
+
+    <pre id="result">Aquí aparecerá la respuesta…</pre>
+
+    <script>
+        async function getInfo() {
+            try {
+                const response = await fetch("http://127.0.0.1:5000/api/info");
+                const data = await response.json();
+                document.getElementById("result").textContent =
+                    JSON.stringify(data, null, 2);
+            } catch (error) {
+                document.getElementById("result").textContent =
+                    "Error al conectar con el servidor";
+                console.error(error);
+            }
+        }
+
+        async function getDetalles() {
+            try {
+                const response = await fetch("http://127.0.0.1:5000/api/detalles");
+                const data = await response.json();
+                document.getElementById("result").textContent =
+                    JSON.stringify(data, null, 2);
+            } catch (error) {
+                document.getElementById("result").textContent =
+                    "Error al conectar con el endpoint de detalles";
+                console.error(error);
+            }
+        }
+    </script>
+
+</body>
+</html>
