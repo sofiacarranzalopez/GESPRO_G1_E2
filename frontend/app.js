@@ -51,12 +51,19 @@ function taskCard(task) {
   const el = document.createElement("div");
   el.className = "task";
   el.draggable = true;
+  el.dataset.id = task.id;
+
 
   el.innerHTML = `
     <div class="title">${escapeHtml(task.title)}</div>
     <div class="meta">
       <span class="pill points">${task.points} pts</span>
-      ${task.assignee ? `<span class="pill assignee">${escapeHtml(task.assignee)}</span>` : ""}
+    <span class="pill assignee">
+  ${escapeHtml(task.assignee || "—")}
+</span>
+<button class="edit-assignee" title="Editar asignado">✏️</button>
+
+
       <span class="pill">${task.status}</span>
     </div>
     <div class="actions">
@@ -169,3 +176,19 @@ setupDropzone(doneList, "DONE");
   await apiHealth();
   await refresh();
 })();
+
+
+document.addEventListener("click", async (e) => {
+  if (!e.target.classList.contains("edit-assignee")) return;
+
+  const card = e.target.closest(".task");
+  const taskId = card.dataset.id;
+
+  const current = card.querySelector(".pill.assignee")?.textContent.trim();
+  const nuevo = prompt("Nuevo asignado:", current === "—" ? "" : current);
+
+  if (nuevo === null) return;
+
+  await updateTask(taskId, { assignee: nuevo.trim() });
+});
+
