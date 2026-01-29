@@ -321,6 +321,32 @@ document.addEventListener("click", (e) => {
   closeAllEditPanels();
 });
 
+// Theme toggle
+const themeToggle = document.getElementById("themeToggle");
+
+function setTheme(theme) {
+  if (theme === "light") {
+    document.body.classList.add("light-mode");
+    themeToggle.textContent = "☀️";
+    localStorage.setItem("theme", "light");
+  } else {
+    document.body.classList.remove("light-mode");
+    themeToggle.textContent = "🌙";
+    localStorage.setItem("theme", "dark");
+  }
+}
+
+function toggleTheme() {
+  const isLight = document.body.classList.contains("light-mode");
+  setTheme(isLight ? "dark" : "light");
+}
+
+themeToggle.addEventListener("click", toggleTheme);
+
+// Cargar tema guardado
+const savedTheme = localStorage.getItem("theme") || "dark";
+setTheme(savedTheme);
+
 (async function init() {
   await apiHealth();
   await refresh();
