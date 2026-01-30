@@ -28,6 +28,7 @@ body{
   background: var(--bg);
   color: var(--text);
 }
+.hidden{ display:none; }
 
 .topbar{
   display:flex; justify-content:space-between; align-items:flex-end;
@@ -43,6 +44,17 @@ h1{ margin:0; font-size:22px; letter-spacing:.2px; }
   color:var(--muted);
   font-size:12px;
 }
+.user-pill{
+  background: rgba(255,255,255,.03);
+  color: var(--text);
+}
+.hint{
+  margin-top:8px;
+  font-size:12px;
+  color: var(--muted);
+}
+.hint.error{ color: var(--danger); }
+.hint.ok{ color: var(--accent); }
 
 .card{
   border:1px solid var(--line);

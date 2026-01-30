@@ -11,6 +11,17 @@ const countDONE = document.getElementById("countDONE");
 const apiStatus = document.getElementById("apiStatus");
 const form = document.getElementById("taskForm");
 
+// login
+const loginCard = document.getElementById("loginCard");
+const loginForm = document.getElementById("loginForm");
+const loginUser = document.getElementById("loginUser");
+const loginPass = document.getElementById("loginPass");
+const loginHint = document.getElementById("loginHint");
+const btnRegister = document.getElementById("btnRegister");
+const logoutBtn = document.getElementById("logoutBtn");
+const userStatus = document.getElementById("userStatus");
+const appContent = document.getElementById("appContent");
+
 // filtros
 const filterPoints = document.getElementById("filterPoints");
 const filterAssignee = document.getElementById("filterAssignee");
@@ -36,6 +47,8 @@ async function apiHealth() {
 }
 
 async function fetchTasks() {
+  const user = getCurrentUser();
+  if (!user) return [];
   const params = new URLSearchParams();
 
   if (filterPoints?.value) params.set("points", filterPoints.value);
@@ -43,7 +56,9 @@ async function fetchTasks() {
   if (sortBy?.value) params.set("sort", sortBy.value);
 
   const url = `${API_BASE}/api/tasks?${params.toString()}`;
-  const r = await fetch(url);
+  const r = await fetch(url, {
+    headers: { "X-User": user }
+  });
   const data = await r.json();
   return data.tasks || [];
 }
@@ -223,9 +238,11 @@ function prevStatus(status) {
 }
 
 async function createTask(payload) {
+  const user = getCurrentUser();
+  if (!user) throw new Error("No autorizado");
   const r = await fetch(`${API_BASE}/api/tasks`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-User": user },
     body: JSON.stringify(payload)
   });
   if (!r.ok) throw new Error("No se pudo crear");
@@ -233,9 +250,11 @@ async function createTask(payload) {
 }
 
 async function updateTask(id, payload) {
+  const user = getCurrentUser();
+  if (!user) throw new Error("No autorizado");
   const r = await fetch(`${API_BASE}/api/tasks/${id}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-User": user },
     body: JSON.stringify(payload)
   });
   if (!r.ok) throw new Error("No se pudo actualizar");
@@ -243,12 +262,18 @@ async function updateTask(id, payload) {
 }
 
 async function deleteTask(id) {
-  const r = await fetch(`${API_BASE}/api/tasks/${id}`, { method: "DELETE" });
+  const user = getCurrentUser();
+  if (!user) throw new Error("No autorizado");
+  const r = await fetch(`${API_BASE}/api/tasks/${id}`, {
+    method: "DELETE",
+    headers: { "X-User": user }
+  });
   if (!r.ok) throw new Error("No se pudo eliminar");
   await refresh();
 }
 
 async function refresh() {
+  if (!getCurrentUser()) return;
   const tasks = await fetchTasks();
   clearBoard();
   updateCounts(tasks);
@@ -280,9 +305,63 @@ function escapeHtml(s) {
   }[m]));
 }
 
+function getCurrentUser() {
+  return localStorage.getItem("currentUser") || "";
+}
+
+function setLoginHint(msg, kind = "") {
+  if (!loginHint) return;
+  loginHint.textContent = msg;
+  loginHint.className = `hint ${kind}`.trim();
+}
+
+function setUserUI() {
+  const user = getCurrentUser();
+  if (user) {
+    userStatus.textContent = user;
+    loginCard.classList.add("hidden");
+    appContent.classList.remove("hidden");
+    logoutBtn.classList.remove("hidden");
+  } else {
+    userStatus.textContent = "Invitado";
+    loginCard.classList.remove("hidden");
+    appContent.classList.add("hidden");
+    logoutBtn.classList.add("hidden");
+    clearBoard();
+    updateCounts([]);
+  }
+}
+
+async function loginRequest(username, password) {
+  const r = await fetch(`${API_BASE}/api/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password })
+  });
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}));
+    throw new Error(data.error || "No se pudo iniciar sesión");
+  }
+  return r.json();
+}
+
+async function registerRequest(username, password) {
+  const r = await fetch(`${API_BASE}/api/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password })
+  });
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}));
+    throw new Error(data.error || "No se pudo registrar");
+  }
+  return r.json();
+}
+
 // submit nueva tarea
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
+  if (!getCurrentUser()) return;
   const title = document.getElementById("title").value.trim();
   const points = Number(document.getElementById("points").value);
   const assignee = document.getElementById("assignee").value.trim();
@@ -307,6 +386,46 @@ clearFilters.addEventListener("click", (e) => {
   filterAssignee.value = "";
   sortBy.value = "points_desc";
   refresh();
+});
+
+// login handlers
+loginForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const username = loginUser.value.trim();
+  const password = loginPass.value.trim();
+  if (!username || !password) return;
+  try {
+    await loginRequest(username, password);
+    localStorage.setItem("currentUser", username);
+    setLoginHint("Bienvenido", "ok");
+    loginForm.reset();
+    setUserUI();
+    await refresh();
+  } catch (err) {
+    setLoginHint(err.message, "error");
+  }
+});
+
+btnRegister.addEventListener("click", async () => {
+  const username = loginUser.value.trim();
+  const password = loginPass.value.trim();
+  if (!username || !password) return;
+  try {
+    await registerRequest(username, password);
+    localStorage.setItem("currentUser", username);
+    setLoginHint("Usuario creado", "ok");
+    loginForm.reset();
+    setUserUI();
+    await refresh();
+  } catch (err) {
+    setLoginHint(err.message, "error");
+  }
+});
+
+logoutBtn.addEventListener("click", () => {
+  localStorage.removeItem("currentUser");
+  setLoginHint("");
+  setUserUI();
 });
 
 // dropzones
@@ -349,5 +468,6 @@ setTheme(savedTheme);
 
 (async function init() {
   await apiHealth();
+  setUserUI();
   await refresh();
 })();

@@ -3,19 +3,21 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from datetime import datetime, timezone
 from uuid import uuid4
-import csv
 from pathlib import Path
 from threading import Lock
+import json
+import hashlib
 
 app = Flask(__name__)
 CORS(app)
 
 # --- Configuración ---
 VALID_STATUSES = {"TODO", "IN_PROGRESS", "DONE"}
-CSV_PATH = Path(__file__).parent / "tasks.csv"
-CSV_FIELDS = ["id", "title", "points", "assignee", "status", "created_at", "updated_at"]
+USERS_PATH = Path(__file__).parent / "users.json"
+TASKS_PATH = Path(__file__).parent / "tasks.json"
 
-TASKS: dict[str, dict] = {}
+USERS: dict[str, dict] = {}
+TASKS_BY_USER: dict[str, list[dict]] = {}
 FILE_LOCK = Lock()
 
 def now_iso() -> str:
@@ -25,64 +27,53 @@ def normalize_status(s: str) -> str:
     s = (s or "").strip().upper()
     return s if s in VALID_STATUSES else "TODO"
 
-def ensure_csv_exists():
-    if not CSV_PATH.exists():
-        with CSV_PATH.open("w", newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(f, fieldnames=CSV_FIELDS)
-            w.writeheader()
+def ensure_json_exists(path: Path, default_obj: dict):
+    if not path.exists():
+        path.write_text(json.dumps(default_obj, ensure_ascii=False, indent=2), encoding="utf-8")
 
-def load_tasks_from_csv():
-    """Carga robusta: no truena aunque el CSV tenga datos viejos."""
-    ensure_csv_exists()
-    TASKS.clear()
 
-    with CSV_PATH.open("r", newline="", encoding="utf-8") as f:
-        r = csv.DictReader(f)
-        for row in r:
-            task_id = (row.get("id") or "").strip()
-            title = (row.get("title") or "").strip()
-            if not task_id or not title:
-                continue
+def load_users():
+    ensure_json_exists(USERS_PATH, {"users": {}})
+    data = json.loads(USERS_PATH.read_text(encoding="utf-8") or "{}")
+    USERS.clear()
+    USERS.update(data.get("users", {}))
 
-            points_raw = (row.get("points") or "1").strip()
-            try:
-                points = int(points_raw)
-            except ValueError:
-                points = 1
 
-            TASKS[task_id] = {
-                "id": task_id,
-                "title": title,
-                "points": points,
-                "assignee": (row.get("assignee") or "").strip(),
-                "status": normalize_status(row.get("status")),
-                "created_at": (row.get("created_at") or now_iso()).strip(),
-                "updated_at": (row.get("updated_at") or now_iso()).strip(),
-            }
+def save_users():
+    USERS_PATH.write_text(
+        json.dumps({"users": USERS}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
-def save_tasks_to_csv():
-    ensure_csv_exists()
-    with CSV_PATH.open("w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=CSV_FIELDS)
-        w.writeheader()
 
-        tasks = list(TASKS.values())
-        tasks.sort(key=lambda t: t.get("created_at", ""))
+def load_tasks():
+    ensure_json_exists(TASKS_PATH, {"tasks": {}})
+    data = json.loads(TASKS_PATH.read_text(encoding="utf-8") or "{}")
+    TASKS_BY_USER.clear()
+    TASKS_BY_USER.update(data.get("tasks", {}))
 
-        for t in tasks:
-            w.writerow({
-                "id": t.get("id", ""),
-                "title": t.get("title", ""),
-                "points": int(t.get("points") or 1),
-                "assignee": t.get("assignee", ""),
-                "status": normalize_status(t.get("status")),
-                "created_at": t.get("created_at", now_iso()),
-                "updated_at": t.get("updated_at", now_iso()),
-            })
+
+def save_tasks():
+    TASKS_PATH.write_text(
+        json.dumps({"tasks": TASKS_BY_USER}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode("utf-8")).hexdigest()
+
+
+def require_user() -> str | None:
+    username = (request.headers.get("X-User") or "").strip()
+    if not username or username not in USERS:
+        return None
+    return username
 
 # --- Inicialización ---
 with FILE_LOCK:
-    load_tasks_from_csv()
+    load_users()
+    load_tasks()
 
 # --- Rutas ---
 @app.get("/")
@@ -91,17 +82,59 @@ def home():
 
 @app.get("/api/health")
 def health():
-    return jsonify({"status": "ok", "time": now_iso(), "csv": str(CSV_PATH)})
+    return jsonify({"status": "ok", "time": now_iso(), "users": str(USERS_PATH), "tasks": str(TASKS_PATH)})
+
+@app.post("/api/register")
+def register():
+    payload = request.get_json(silent=True) or {}
+    username = (payload.get("username") or "").strip()
+    password = (payload.get("password") or "").strip()
+
+    if not username or not password:
+        return jsonify({"error": "Usuario y contraseña son obligatorios"}), 400
+
+    with FILE_LOCK:
+        if username in USERS:
+            return jsonify({"error": "El usuario ya existe"}), 409
+
+        USERS[username] = {
+            "password_hash": hash_password(password),
+            "created_at": now_iso(),
+        }
+        TASKS_BY_USER.setdefault(username, [])
+        save_users()
+        save_tasks()
+
+    return jsonify({"ok": True, "user": username}), 201
+
+@app.post("/api/login")
+def login():
+    payload = request.get_json(silent=True) or {}
+    username = (payload.get("username") or "").strip()
+    password = (payload.get("password") or "").strip()
+
+    if not username or not password:
+        return jsonify({"error": "Usuario y contraseña son obligatorios"}), 400
+
+    user = USERS.get(username)
+    if not user or user.get("password_hash") != hash_password(password):
+        return jsonify({"error": "Credenciales inválidas"}), 401
+
+    return jsonify({"ok": True, "user": username})
 
 @app.get("/api/tasks")
 def list_tasks():
+    user = require_user()
+    if not user:
+        return jsonify({"error": "No autorizado"}), 401
+
     # filtros
     status = request.args.get("status")
     assignee = (request.args.get("assignee") or "").strip().lower()
     points = request.args.get("points")
     sort = (request.args.get("sort") or "points_desc").strip().lower()
 
-    tasks = list(TASKS.values())
+    tasks = list(TASKS_BY_USER.get(user, []))
 
     if status:
         s = normalize_status(status)
@@ -129,6 +162,10 @@ def list_tasks():
 
 @app.post("/api/tasks")
 def create_task():
+    user = require_user()
+    if not user:
+        return jsonify({"error": "No autorizado"}), 401
+
     payload = request.get_json(silent=True) or {}
     title = (payload.get("title") or "").strip()
     if not title:
@@ -151,20 +188,25 @@ def create_task():
     }
 
     with FILE_LOCK:
-        TASKS[task_id] = task
-        save_tasks_to_csv()
+        TASKS_BY_USER.setdefault(user, [])
+        TASKS_BY_USER[user].append(task)
+        save_tasks()
 
     return jsonify(task), 201
 
 @app.patch("/api/tasks/<task_id>")
 def update_task(task_id: str):
-    if task_id not in TASKS:
-        return jsonify({"error": "No encontrado"}), 404
+    user = require_user()
+    if not user:
+        return jsonify({"error": "No autorizado"}), 401
 
     payload = request.get_json(silent=True) or {}
 
     with FILE_LOCK:
-        task = TASKS[task_id]
+        tasks = TASKS_BY_USER.get(user, [])
+        task = next((t for t in tasks if t.get("id") == task_id), None)
+        if not task:
+            return jsonify({"error": "No encontrado"}), 404
 
         if "title" in payload:
             title = (payload.get("title") or "").strip()
@@ -185,17 +227,23 @@ def update_task(task_id: str):
             task["status"] = normalize_status(payload["status"])
 
         task["updated_at"] = now_iso()
-        save_tasks_to_csv()
+        save_tasks()
 
     return jsonify(task)
 
 @app.delete("/api/tasks/<task_id>")
 def delete_task(task_id: str):
+    user = require_user()
+    if not user:
+        return jsonify({"error": "No autorizado"}), 401
+
     with FILE_LOCK:
-        if task_id not in TASKS:
+        tasks = TASKS_BY_USER.get(user, [])
+        idx = next((i for i, t in enumerate(tasks) if t.get("id") == task_id), None)
+        if idx is None:
             return jsonify({"error": "No encontrado"}), 404
-        TASKS.pop(task_id)
-        save_tasks_to_csv()
+        tasks.pop(idx)
+        save_tasks()
 
     return jsonify({"deleted": True})
 

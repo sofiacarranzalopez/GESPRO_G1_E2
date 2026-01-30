@@ -1,0 +1,15 @@
+{
+  "tasks": {
+    "Luis": [
+      {
+        "id": "d51e9656-ec57-441d-bfbe-42e02ecf47c3",
+        "title": "tarea 1",
+        "points": 2,
+        "assignee": "",
+        "status": "TODO",
+        "created_at": "2026-01-30T08:10:29.238303+00:00Z",
+        "updated_at": "2026-01-30T08:10:29.238323+00:00Z"
+      }
+    ]
+  }
+}
