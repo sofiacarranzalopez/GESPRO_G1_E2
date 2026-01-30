@@ -14,7 +14,7 @@
     </div>
     <div style="display: flex; gap: 12px; align-items: center;">
       <button id="themeToggle" class="btn" title="Cambiar tema">🌙</button>
-      <span class="pill user-pill" id="userStatus">Invitado</span>
+      <span class="pill user-pill" id="userStatus">Inicio</span>
       <button id="logoutBtn" class="btn ghost" title="Cerrar sesión">Salir</button>
       <div class="status-pill" id="apiStatus">API: —</div>
     </div>
@@ -22,17 +22,35 @@
 
   <section class="card" id="loginCard">
     <h2>Acceso</h2>
-    <form id="loginForm" class="form" style="grid-template-columns: 1fr 1fr 120px 120px;">
+    <form id="loginForm" class="form" style="grid-template-columns: 1fr 1fr 120px;">
       <input id="loginUser" type="text" placeholder="Usuario" required />
       <input id="loginPass" type="password" placeholder="Contraseña" required />
       <button id="btnLogin" type="submit" class="btn primary">Entrar</button>
-      <button id="btnRegister" type="button" class="btn">Registrar</button>
     </form>
     <div class="hint" id="loginHint"></div>
+
+    <div style="display: flex; gap: 10px; margin-top: 12px;">
+      <button id="btnRegisterPanel" class="btn" style="flex: 1;">Crear cuenta</button>
+      <button id="btnGuest" class="btn ghost" style="flex: 1;">Entrar como invitado</button>
+    </div>
+
+    <section id="registerPanel" class="card hidden" style="margin-top: 12px;">
+      <h2>Crear cuenta</h2>
+      <form id="registerForm" class="form" style="grid-template-columns: 1fr 1fr;">
+        <input id="regUser" type="text" placeholder="Usuario" required />
+        <input id="regPass" type="password" placeholder="Contraseña" required />
+        <select id="regRole" style="grid-column: 1;">
+          <option value="normal">Normal</option>
+          <option value="product_owner">Product Owner</option>
+        </select>
+        <button type="submit" class="btn primary" style="grid-column: 2;">Crear</button>
+      </form>
+      <div class="hint" id="registerHint"></div>
+    </section>
   </section>
 
   <div id="appContent" class="hidden">
-    <section class="card">
+    <section class="card" id="createCard">
       <h2>Nueva tarea</h2>
       <form id="taskForm" class="form">
         <input id="title" type="text" placeholder="Título de la tarea" required />

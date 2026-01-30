@@ -13,11 +13,12 @@ CORS(app)
 
 # --- Configuración ---
 VALID_STATUSES = {"TODO", "IN_PROGRESS", "DONE"}
+VALID_ROLES = {"product_owner", "normal", "invitado"}
 USERS_PATH = Path(__file__).parent / "users.json"
 TASKS_PATH = Path(__file__).parent / "tasks.json"
 
 USERS: dict[str, dict] = {}
-TASKS_BY_USER: dict[str, list[dict]] = {}
+TASKS: list[dict] = []
 FILE_LOCK = Lock()
 
 def now_iso() -> str:
@@ -36,7 +37,16 @@ def load_users():
     ensure_json_exists(USERS_PATH, {"users": {}})
     data = json.loads(USERS_PATH.read_text(encoding="utf-8") or "{}")
     USERS.clear()
-    USERS.update(data.get("users", {}))
+    raw = data.get("users", {})
+    for username, info in raw.items():
+        role = (info or {}).get("role") or "normal"
+        if role not in VALID_ROLES:
+            role = "normal"
+        USERS[username] = {
+            "password_hash": (info or {}).get("password_hash", ""),
+            "created_at": (info or {}).get("created_at", now_iso()),
+            "role": role,
+        }
 
 
 def save_users():
@@ -47,15 +57,49 @@ def save_users():
 
 
 def load_tasks():
-    ensure_json_exists(TASKS_PATH, {"tasks": {}})
+    ensure_json_exists(TASKS_PATH, {"tasks": []})
     data = json.loads(TASKS_PATH.read_text(encoding="utf-8") or "{}")
-    TASKS_BY_USER.clear()
-    TASKS_BY_USER.update(data.get("tasks", {}))
+    raw = data.get("tasks", [])
+
+    tasks_list: list[dict] = []
+    if isinstance(raw, list):
+        tasks_list = raw
+    elif isinstance(raw, dict):
+        # compatibilidad: puede venir como {user: [tasks]} o {id: task}
+        if all(isinstance(v, list) for v in raw.values()):
+            for v in raw.values():
+                tasks_list.extend(v)
+        elif all(isinstance(v, dict) for v in raw.values()):
+            tasks_list = list(raw.values())
+
+    normalized: list[dict] = []
+    for t in tasks_list:
+        task_id = (t.get("id") or "").strip()
+        title = (t.get("title") or "").strip()
+        if not task_id or not title:
+            continue
+        try:
+            points = int(t.get("points") or 1)
+        except ValueError:
+            points = 1
+        normalized.append({
+            "id": task_id,
+            "title": title,
+            "points": points,
+            "assignee": (t.get("assignee") or "").strip(),
+            "status": normalize_status(t.get("status")),
+            "created_at": (t.get("created_at") or now_iso()).strip(),
+            "updated_at": (t.get("updated_at") or now_iso()).strip(),
+        })
+
+    TASKS.clear()
+    TASKS.extend(normalized)
 
 
 def save_tasks():
+    tasks_sorted = sorted(TASKS, key=lambda t: t.get("created_at", ""))
     TASKS_PATH.write_text(
-        json.dumps({"tasks": TASKS_BY_USER}, ensure_ascii=False, indent=2),
+        json.dumps({"tasks": tasks_sorted}, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
 
@@ -66,9 +110,22 @@ def hash_password(password: str) -> str:
 
 def require_user() -> str | None:
     username = (request.headers.get("X-User") or "").strip()
-    if not username or username not in USERS:
+    if not username:
+        return None
+    # permitir invitado sin verificación
+    if username == "invitado":
+        return "invitado"
+    # verificar que el usuario exista
+    if username not in USERS:
         return None
     return username
+
+
+def get_user_role(username: str) -> str:
+    if username == "invitado":
+        return "invitado"
+    role = (USERS.get(username) or {}).get("role") or "normal"
+    return role if role in VALID_ROLES else "normal"
 
 # --- Inicialización ---
 with FILE_LOCK:
@@ -89,9 +146,13 @@ def register():
     payload = request.get_json(silent=True) or {}
     username = (payload.get("username") or "").strip()
     password = (payload.get("password") or "").strip()
+    role = (payload.get("role") or "normal").strip().lower()
 
     if not username or not password:
         return jsonify({"error": "Usuario y contraseña son obligatorios"}), 400
+
+    if role not in VALID_ROLES or role == "invitado":
+        role = "normal"
 
     with FILE_LOCK:
         if username in USERS:
@@ -100,12 +161,12 @@ def register():
         USERS[username] = {
             "password_hash": hash_password(password),
             "created_at": now_iso(),
+            "role": role,
         }
-        TASKS_BY_USER.setdefault(username, [])
         save_users()
-        save_tasks()
 
-    return jsonify({"ok": True, "user": username}), 201
+    return jsonify({"ok": True, "user": username, "role": role}), 201
+
 
 @app.post("/api/login")
 def login():
@@ -120,7 +181,7 @@ def login():
     if not user or user.get("password_hash") != hash_password(password):
         return jsonify({"error": "Credenciales inválidas"}), 401
 
-    return jsonify({"ok": True, "user": username})
+    return jsonify({"ok": True, "user": username, "role": get_user_role(username)})
 
 @app.get("/api/tasks")
 def list_tasks():
@@ -134,7 +195,7 @@ def list_tasks():
     points = request.args.get("points")
     sort = (request.args.get("sort") or "points_desc").strip().lower()
 
-    tasks = list(TASKS_BY_USER.get(user, []))
+    tasks = list(TASKS)
 
     if status:
         s = normalize_status(status)
@@ -166,6 +227,10 @@ def create_task():
     if not user:
         return jsonify({"error": "No autorizado"}), 401
 
+    role = get_user_role(user)
+    if role not in {"product_owner", "normal"}:
+        return jsonify({"error": "No autorizado"}), 403
+
     payload = request.get_json(silent=True) or {}
     title = (payload.get("title") or "").strip()
     if not title:
@@ -188,8 +253,7 @@ def create_task():
     }
 
     with FILE_LOCK:
-        TASKS_BY_USER.setdefault(user, [])
-        TASKS_BY_USER[user].append(task)
+        TASKS.append(task)
         save_tasks()
 
     return jsonify(task), 201
@@ -200,11 +264,14 @@ def update_task(task_id: str):
     if not user:
         return jsonify({"error": "No autorizado"}), 401
 
+    role = get_user_role(user)
+    if role != "product_owner":
+        return jsonify({"error": "No autorizado"}), 403
+
     payload = request.get_json(silent=True) or {}
 
     with FILE_LOCK:
-        tasks = TASKS_BY_USER.get(user, [])
-        task = next((t for t in tasks if t.get("id") == task_id), None)
+        task = next((t for t in TASKS if t.get("id") == task_id), None)
         if not task:
             return jsonify({"error": "No encontrado"}), 404
 
@@ -237,12 +304,15 @@ def delete_task(task_id: str):
     if not user:
         return jsonify({"error": "No autorizado"}), 401
 
+    role = get_user_role(user)
+    if role not in {"product_owner", "normal"}:
+        return jsonify({"error": "No autorizado"}), 403
+
     with FILE_LOCK:
-        tasks = TASKS_BY_USER.get(user, [])
-        idx = next((i for i, t in enumerate(tasks) if t.get("id") == task_id), None)
+        idx = next((i for i, t in enumerate(TASKS) if t.get("id") == task_id), None)
         if idx is None:
             return jsonify({"error": "No encontrado"}), 404
-        tasks.pop(idx)
+        TASKS.pop(idx)
         save_tasks()
 
     return jsonify({"deleted": True})

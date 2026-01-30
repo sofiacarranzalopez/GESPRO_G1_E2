@@ -56,6 +56,8 @@ h1{ margin:0; font-size:22px; letter-spacing:.2px; }
 .hint.error{ color: var(--danger); }
 .hint.ok{ color: var(--accent); }
 
+#registerPanel.hidden{ display: none; }
+
 .card{
   border:1px solid var(--line);
   background: rgba(255,255,255,.02);
@@ -90,6 +92,12 @@ input::placeholder{ color:rgba(148,163,184,.7); }
   cursor:pointer;
 }
 .btn:hover{ border-color: rgba(96,165,250,.55); }
+.btn[disabled]{
+  opacity:.45;
+  cursor:not-allowed;
+  border-color: var(--line);
+}
+.btn[disabled]:hover{ border-color: var(--line); }
 .btn.primary{
   background: rgba(96,165,250,.18);
   border-color: rgba(96,165,250,.35);

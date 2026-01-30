@@ -17,10 +17,18 @@ const loginForm = document.getElementById("loginForm");
 const loginUser = document.getElementById("loginUser");
 const loginPass = document.getElementById("loginPass");
 const loginHint = document.getElementById("loginHint");
-const btnRegister = document.getElementById("btnRegister");
+const btnRegisterPanel = document.getElementById("btnRegisterPanel");
+const btnGuest = document.getElementById("btnGuest");
+const registerPanel = document.getElementById("registerPanel");
+const registerForm = document.getElementById("registerForm");
+const regUser = document.getElementById("regUser");
+const regPass = document.getElementById("regPass");
+const regRole = document.getElementById("regRole");
+const registerHint = document.getElementById("registerHint");
 const logoutBtn = document.getElementById("logoutBtn");
 const userStatus = document.getElementById("userStatus");
 const appContent = document.getElementById("appContent");
+const createCard = document.getElementById("createCard");
 
 // filtros
 const filterPoints = document.getElementById("filterPoints");
@@ -105,122 +113,145 @@ function taskCard(task) {
     </div>
   `;
 
+  const role = getCurrentRole() || "normal";
+  const canUpdate = role === "product_owner";
+  const canDelete = role === "product_owner" || role === "normal";
+
+  const actionsEl = el.querySelector(".actions");
   const [btnLeft, btnRight, btnDone, btnEdit, btnDelete] =
-    el.querySelectorAll(".actions button");
+    actionsEl.querySelectorAll(".actions button");
 
-  btnLeft.onclick = () => updateTask(task.id, { status: prevStatus(task.status) });
-  btnRight.onclick = () => updateTask(task.id, { status: nextStatus(task.status) });
-  btnDone.onclick = () => updateTask(task.id, { status: "DONE" });
-  btnDelete.onclick = () => deleteTask(task.id);
+  if (role === "invitado") actionsEl.classList.add("hidden");
 
-  // ✅ EDITAR: despliega panel inline para elegir qué editar
-  btnEdit.onclick = () => {
-    // si ya existe, lo cerramos
-    const existing = el.querySelector(".edit-panel");
-    if (existing) {
-      existing.remove();
-      return;
-    }
+  if (canUpdate) {
+    btnLeft.onclick = () => updateTask(task.id, { status: prevStatus(task.status) });
+    btnRight.onclick = () => updateTask(task.id, { status: nextStatus(task.status) });
+    btnDone.onclick = () => updateTask(task.id, { status: "DONE" });
 
-    // cierra otros paneles abiertos
-    closeAllEditPanels(el);
-
-    const panel = document.createElement("div");
-    panel.className = "edit-panel";
-
-    panel.innerHTML = `
-      <label>¿Qué quieres editar?</label>
-      <select class="edit-what">
-        <option value="title" selected>Nombre de la tarea</option>
-        <option value="assignee">Responsable</option>
-        <option value="points">Prioridad</option>
-      </select>
-
-      <div class="edit-fields">
-        <!-- aquí se renderiza el campo según selección -->
-      </div>
-
-      <div class="actions">
-        <button class="btn ghost cancel" type="button">Cancelar</button>
-        <button class="btn primary save" type="button">Guardar</button>
-      </div>
-    `;
-
-    const editWhat = panel.querySelector(".edit-what");
-    const fields = panel.querySelector(".edit-fields");
-    const btnCancel = panel.querySelector(".cancel");
-    const btnSave = panel.querySelector(".save");
-
-    function renderField(kind) {
-      if (kind === "title") {
-        fields.innerHTML = `
-          <label>Nuevo nombre</label>
-          <input class="val-title" type="text" value="${escapeHtml(task.title)}" />
-        `;
-      } else if (kind === "assignee") {
-        fields.innerHTML = `
-          <label>Nuevo responsable</label>
-          <input class="val-assignee" type="text" value="${escapeHtml(task.assignee || "")}" placeholder="Ej: Valeria" />
-        `;
-      } else if (kind === "points") {
-        fields.innerHTML = `
-          <label>Nueva prioridad</label>
-          <select class="val-points">
-          <option value="1">1</option>
-          <option value="2">2</option>
-          <option value="4">4</option>
-          <option value="8">8</option>
-          <option value="16">16</option>
-          </select>
-        `;
-        const sel = fields.querySelector(".val-points");
-        sel.value = String(task.points ?? 1);
-      }
-    }
-
-    renderField(editWhat.value);
-
-    editWhat.onchange = () => renderField(editWhat.value);
-
-    btnCancel.onclick = () => panel.remove();
-
-    btnSave.onclick = async () => {
-      const kind = editWhat.value;
-      const payload = {};
-
-      if (kind === "title") {
-        const v = fields.querySelector(".val-title").value.trim();
-        if (!v) return; // no guardamos vacío
-        payload.title = v;
+    // ✅ EDITAR: despliega panel inline para elegir qué editar
+    btnEdit.onclick = () => {
+      // si ya existe, lo cerramos
+      const existing = el.querySelector(".edit-panel");
+      if (existing) {
+        existing.remove();
+        return;
       }
 
-      if (kind === "assignee") {
-        const v = fields.querySelector(".val-assignee").value.trim();
-        payload.assignee = v; // puede ser vacío para quitar responsable
+      // cierra otros paneles abiertos
+      closeAllEditPanels(el);
+
+      const panel = document.createElement("div");
+      panel.className = "edit-panel";
+
+      panel.innerHTML = `
+        <label>¿Qué quieres editar?</label>
+        <select class="edit-what">
+          <option value="title" selected>Nombre de la tarea</option>
+          <option value="assignee">Responsable</option>
+          <option value="points">Prioridad</option>
+        </select>
+
+        <div class="edit-fields">
+          <!-- aquí se renderiza el campo según selección -->
+        </div>
+
+        <div class="actions">
+          <button class="btn ghost cancel" type="button">Cancelar</button>
+          <button class="btn primary save" type="button">Guardar</button>
+        </div>
+      `;
+
+      const editWhat = panel.querySelector(".edit-what");
+      const fields = panel.querySelector(".edit-fields");
+      const btnCancel = panel.querySelector(".cancel");
+      const btnSave = panel.querySelector(".save");
+
+      function renderField(kind) {
+        if (kind === "title") {
+          fields.innerHTML = `
+            <label>Nuevo nombre</label>
+            <input class="val-title" type="text" value="${escapeHtml(task.title)}" />
+          `;
+        } else if (kind === "assignee") {
+          fields.innerHTML = `
+            <label>Nuevo responsable</label>
+            <input class="val-assignee" type="text" value="${escapeHtml(task.assignee || "")}" placeholder="Ej: Valeria" />
+          `;
+        } else if (kind === "points") {
+          fields.innerHTML = `
+            <label>Nueva prioridad</label>
+            <select class="val-points">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="4">4</option>
+            <option value="8">8</option>
+            <option value="16">16</option>
+            </select>
+          `;
+          const sel = fields.querySelector(".val-points");
+          sel.value = String(task.points ?? 1);
+        }
       }
 
-      if (kind === "points") {
-        const v = Number(fields.querySelector(".val-points").value);
-        payload.points = Number.isFinite(v) ? v : 1;
-      }
+      renderField(editWhat.value);
 
-      await updateTask(task.id, payload);
-      panel.remove();
+      editWhat.onchange = () => renderField(editWhat.value);
+
+      btnCancel.onclick = () => panel.remove();
+
+      btnSave.onclick = async () => {
+        const kind = editWhat.value;
+        const payload = {};
+
+        if (kind === "title") {
+          const v = fields.querySelector(".val-title").value.trim();
+          if (!v) return; // no guardamos vacío
+          payload.title = v;
+        }
+
+        if (kind === "assignee") {
+          const v = fields.querySelector(".val-assignee").value.trim();
+          payload.assignee = v; // puede ser vacío para quitar responsable
+        }
+
+        if (kind === "points") {
+          const v = Number(fields.querySelector(".val-points").value);
+          payload.points = Number.isFinite(v) ? v : 1;
+        }
+
+        await updateTask(task.id, payload);
+        panel.remove();
+      };
+
+      el.appendChild(panel);
     };
+  } else {
+    btnLeft.disabled = true;
+    btnRight.disabled = true;
+    btnDone.disabled = true;
+    btnEdit.disabled = true;
+  }
 
-    el.appendChild(panel);
-  };
+  if (canDelete) {
+    btnDelete.onclick = () => deleteTask(task.id);
+  } else {
+    btnDelete.disabled = true;
+  }
 
-  // drag events
-  el.addEventListener("dragstart", () => {
-    draggedTaskId = task.id;
-    setTimeout(() => el.style.opacity = "0.6", 0);
-  });
+  if (canUpdate) {
+    // drag events
+    el.addEventListener("dragstart", () => {
+      draggedTaskId = task.id;
+      setTimeout(() => el.style.opacity = "0.6", 0);
+    });
 
-  el.addEventListener("dragend", () => {
-    draggedTaskId = null;
-    el.style.opacity = "1";
-  });
+    el.addEventListener("dragend", () => {
+      draggedTaskId = null;
+      el.style.opacity = "1";
+    });
+  } else {
+    el.draggable = false;
+  }
 
   return el;
 }
@@ -285,6 +316,7 @@ async function refresh() {
 
 function setupDropzone(zoneEl, status) {
   zoneEl.addEventListener("dragover", (e) => {
+    if (!canUpdateTasks()) return;
     e.preventDefault();
     zoneEl.classList.add("dragover");
   });
@@ -292,6 +324,7 @@ function setupDropzone(zoneEl, status) {
   zoneEl.addEventListener("dragleave", () => zoneEl.classList.remove("dragover"));
 
   zoneEl.addEventListener("drop", async (e) => {
+    if (!canUpdateTasks()) return;
     e.preventDefault();
     zoneEl.classList.remove("dragover");
     if (!draggedTaskId) return;
@@ -309,6 +342,25 @@ function getCurrentUser() {
   return localStorage.getItem("currentUser") || "";
 }
 
+function getCurrentRole() {
+  return localStorage.getItem("currentRole") || "";
+}
+
+function canCreateTasks() {
+  const role = getCurrentRole();
+  return role === "product_owner" || role === "normal";
+}
+
+function canUpdateTasks() {
+  const role = getCurrentRole();
+  return role === "product_owner";
+}
+
+function canDeleteTasks() {
+  const role = getCurrentRole();
+  return role === "product_owner" || role === "normal";
+}
+
 function setLoginHint(msg, kind = "") {
   if (!loginHint) return;
   loginHint.textContent = msg;
@@ -317,16 +369,22 @@ function setLoginHint(msg, kind = "") {
 
 function setUserUI() {
   const user = getCurrentUser();
+  const role = getCurrentRole() || "normal";
   if (user) {
-    userStatus.textContent = user;
+    userStatus.textContent = `${user} (${role})`;
     loginCard.classList.add("hidden");
     appContent.classList.remove("hidden");
     logoutBtn.classList.remove("hidden");
+    if (createCard) {
+      if (role === "invitado") createCard.classList.add("hidden");
+      else createCard.classList.remove("hidden");
+    }
   } else {
-    userStatus.textContent = "Invitado";
+    userStatus.textContent = "Inicio";
     loginCard.classList.remove("hidden");
     appContent.classList.add("hidden");
     logoutBtn.classList.add("hidden");
+    if (createCard) createCard.classList.remove("hidden");
     clearBoard();
     updateCounts([]);
   }
@@ -345,11 +403,11 @@ async function loginRequest(username, password) {
   return r.json();
 }
 
-async function registerRequest(username, password) {
+async function registerRequest(username, password, role = "normal") {
   const r = await fetch(`${API_BASE}/api/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password })
+    body: JSON.stringify({ username, password, role })
   });
   if (!r.ok) {
     const data = await r.json().catch(() => ({}));
@@ -362,6 +420,7 @@ async function registerRequest(username, password) {
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!getCurrentUser()) return;
+  if (!canCreateTasks()) return;
   const title = document.getElementById("title").value.trim();
   const points = Number(document.getElementById("points").value);
   const assignee = document.getElementById("assignee").value.trim();
@@ -395,10 +454,12 @@ loginForm.addEventListener("submit", async (e) => {
   const password = loginPass.value.trim();
   if (!username || !password) return;
   try {
-    await loginRequest(username, password);
+    const data = await loginRequest(username, password);
     localStorage.setItem("currentUser", username);
+    localStorage.setItem("currentRole", data.role || "normal");
     setLoginHint("Bienvenido", "ok");
     loginForm.reset();
+    registerPanel.classList.add("hidden");
     setUserUI();
     await refresh();
   } catch (err) {
@@ -406,24 +467,47 @@ loginForm.addEventListener("submit", async (e) => {
   }
 });
 
-btnRegister.addEventListener("click", async () => {
-  const username = loginUser.value.trim();
-  const password = loginPass.value.trim();
+btnRegisterPanel.addEventListener("click", () => {
+  registerPanel.classList.toggle("hidden");
+});
+
+registerForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const username = regUser.value.trim();
+  const password = regPass.value.trim();
+  const role = regRole.value || "normal";
   if (!username || !password) return;
   try {
-    await registerRequest(username, password);
+    const data = await registerRequest(username, password, role);
     localStorage.setItem("currentUser", username);
-    setLoginHint("Usuario creado", "ok");
-    loginForm.reset();
-    setUserUI();
-    await refresh();
+    localStorage.setItem("currentRole", data.role || role);
+    setLoginHint("", "");
+    registerHint.textContent = "Cuenta creada. Bienvenido!";
+    registerHint.className = "hint ok";
+    registerForm.reset();
+    setTimeout(() => {
+      registerPanel.classList.add("hidden");
+      setUserUI();
+      refresh();
+    }, 500);
   } catch (err) {
-    setLoginHint(err.message, "error");
+    registerHint.textContent = err.message;
+    registerHint.className = "hint error";
   }
+});
+
+btnGuest.addEventListener("click", () => {
+  localStorage.setItem("currentUser", "invitado");
+  localStorage.setItem("currentRole", "invitado");
+  setLoginHint("", "");
+  registerPanel.classList.add("hidden");
+  setUserUI();
+  refresh();
 });
 
 logoutBtn.addEventListener("click", () => {
   localStorage.removeItem("currentUser");
+  localStorage.removeItem("currentRole");
   setLoginHint("");
   setUserUI();
 });
